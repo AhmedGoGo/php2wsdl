@@ -379,12 +379,6 @@ class WSDL
         if ($this->isXDSType($type)) {
             return self::$XSDTypes[strtolower($type)];
         } elseif ($type) {
-            if (strpos($type, '[]')) {
-                if ($this->isXDSType(str_replace('[]', '', $type))) {
-                    return self::$XSDTypes['array'];
-                }
-            }
-
             return $this->addComplexType($type);
         } else {
             return null;
@@ -419,7 +413,6 @@ class WSDL
             return $this->addComplexTypeArray(str_replace('[]', '', $type), $type);
         }
 
-        $class = new ReflectionClass($type);
 
         $soapTypeName = static::typeToQName($type);
         $soapType = 'tns:' . $soapTypeName;
@@ -427,32 +420,41 @@ class WSDL
         $this->addType($type, $soapType);
 
         $all = $this->dom->createElement('xsd:all');
-        foreach ($class->getProperties() as $property) {
-            $annotationsCollection = $property->getReflectionDocComment()->getAnnotationsCollection();
-            if ($property->isPublic() && $annotationsCollection->hasAnnotationTag('var')) {
-                $element = $this->dom->createElement('xsd:element');
-                $element->setAttribute('name', $property->getName());
-                $propertyVarAnnotation = $annotationsCollection->getAnnotation('var');
-                $element->setAttribute('type', $this->getXSDType(reset($propertyVarAnnotation)->getVarType()));
-                if ($annotationsCollection->hasAnnotationTag('nillable')) {
-                    $element->setAttribute('nillable', 'true');
-                }
-                if ($annotationsCollection->hasAnnotationTag('minOccurs')) {
-                    $minOccurs = intval($annotationsCollection->getAnnotation('minOccurs')[0]->getDescription());
-                    $element->setAttribute('minOccurs', $minOccurs > 0 ? $minOccurs : 0);
-                    if ($minOccurs > 1) {
-                        $all = $this->changeAllToSequence($all);
+
+        if (!$this->isXDSType($type)){
+        $class = new ReflectionClass($type);
+            foreach ($class->getProperties() as $property) {
+                $annotationsCollection = $property->getReflectionDocComment()->getAnnotationsCollection();
+                if ($property->isPublic() && $annotationsCollection->hasAnnotationTag('var')) {
+                    $element = $this->dom->createElement('xsd:element');
+                    $element->setAttribute('name', $property->getName());
+                    $propertyVarAnnotation = $annotationsCollection->getAnnotation('var');
+                    $element->setAttribute('type', $this->getXSDType(reset($propertyVarAnnotation)->getVarType()));
+                    if ($annotationsCollection->hasAnnotationTag('nillable')) {
+                        $element->setAttribute('nillable', 'true');
                     }
-                }
-                if ($annotationsCollection->hasAnnotationTag('maxOccurs')) {
-                    $maxOccurs = intval($annotationsCollection->getAnnotation('maxOccurs')[0]->getDescription());
-                    $element->setAttribute('maxOccurs', $maxOccurs > 0 ? $maxOccurs : 'unbounded');
-                    if ($maxOccurs !== 1) {
-                        $all = $this->changeAllToSequence($all);
+                    if ($annotationsCollection->hasAnnotationTag('minOccurs')) {
+                        $minOccurs = intval($annotationsCollection->getAnnotation('minOccurs')[0]->getDescription());
+                        $element->setAttribute('minOccurs', $minOccurs > 0 ? $minOccurs : 0);
+                        if ($minOccurs > 1) {
+                            $all = $this->changeAllToSequence($all);
+                        }
                     }
+                    if ($annotationsCollection->hasAnnotationTag('maxOccurs')) {
+                        $maxOccurs = intval($annotationsCollection->getAnnotation('maxOccurs')[0]->getDescription());
+                        $element->setAttribute('maxOccurs', $maxOccurs > 0 ? $maxOccurs : 'unbounded');
+                        if ($maxOccurs !== 1) {
+                            $all = $this->changeAllToSequence($all);
+                        }
+                    }
+                    $all->appendChild($element);
                 }
-                $all->appendChild($element);
             }
+        }else{
+            $element = $this->dom->createElement('xsd:element');
+            $element->setAttribute('name', "element");
+            $element->setAttribute('type', self::$XSDTypes[$type]);
+            $all->appendChild($element);
         }
 
         $complexType = $this->dom->createElement('xsd:complexType');
